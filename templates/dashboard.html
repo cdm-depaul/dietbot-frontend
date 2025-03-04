@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <header class="dashboard-header">
+            <h1>Your Dashboard</h1>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <p>Welcome, {{ user.name }}!</p>
+                <a href="{{ url_for('profile') }}" class="btn" style="font-size: 1.5rem">👤</a>
+            </div>
+        </header>
+
+            <!-- Today's Meals Card -->
+            <div class="card">
+                <div class="card-body">
+                    <h2>Today's Meals</h2>
+                    {% if daily_nutrients %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Dish</th>
+                                <th>Calories</th>
+                                <th>Protein</th>
+                                <th>Carbs</th>
+                                <th>Fat</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for meal in daily_nutrients %}
+                            <tr>
+                                <td>{{ meal.dish_name }}</td>
+                                <td>{{ meal.calories }}</td>
+                                <td>{{ meal.protein }}</td>
+                                <td>{{ meal.carbs }}</td>
+                                <td>{{ meal.fat }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                        <p>No meals logged today</p>
+                    {% endif %}
+                    <a href="{{ url_for('add_dish') }}" class="btn">Add Meal</a>
+                </div>
+            </div>
+
+            <!-- Health Analytics Card -->
+            <div class="card">
+                <div class="card-body">
+                    <h2>Health Analytics</h2>
+                    <p>Discover insights about your daily nutrient intake and track your progress towards a healthier you. Unlock your health risk predictions and boost your gamification scores!</p>
+                    <a href="{{ url_for('show_comparison') }}" class="btn">View Comparisons</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chat Section -->
+        <section class="chat-section">
+            <h2>Chat with Your Diet Assistant</h2>
+            <div id="chat-messages" class="chat-messages"></div>
+            <form id="chat-form">
+                <input type="text" id="user-input" placeholder="Type your message...">
+                <button type="submit" class="btn">Send</button>
+            </form>
+        </section>
+
+        <footer class="dashboard-footer">
+            <a href="{{ url_for('logout') }}" class="btn logout">Sign Out</a>
+        </footer>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            const loadingHTML = `
+                <div class="loading-container">
+                    <div class="loading-text">Thinking</div>
+                    <div class="loading-dots">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                </div>
+            `;
+            
+            $('#chat-form').on('submit', function(e) {
+                e.preventDefault();
+                const userInput = $('#user-input').val();
+                if (!userInput) return;
+                addMessage(userInput, 'user-message');
+                $('#user-input').val('');
+                const $loading = $(loadingHTML);
+                $('#chat-messages').append($loading);
+                scrollToBottom();
+                
+                $.ajax({
+                    url: '/ask',
+                    method: 'POST',
+                    data: { query: userInput },
+                    success: function(response) {
+                        $loading.remove();
+                        handleBotResponse(response);
+                    },
+                    error: function(xhr, status, error) {
+                        $loading.remove();
+                        addMessage('Error connecting to the server: ' + error, 'bot-message error');
+                    }
+                });
+            });
+
+            function handleBotResponse(data) {
+                if (data.reasoning || data.answer) {
+                    if (data.reasoning) {
+                        addMessage('System Reasoning: ' + data.reasoning, 'bot-message reasoning');
+                    }
+                    if (data.answer) {
+                        addMessage(data.answer, 'bot-message answer');
+                        if (data.context_used) {
+                            const contextMessage = addMessage('Context used in response:', 'bot-message context-message');
+                            const toggleButton = $('<button class="context-toggle">▼ Show Context</button>');
+                            const contextContent = $('<div class="context-content"></div>').text(data.context_used);
+                            toggleButton.on('click', function() {
+                                contextContent.toggle();
+                                $(this).text(contextContent.is(':visible') ? '▲ Hide Context' : '▼ Show Context');
+                            });
+                            contextMessage.append(toggleButton, contextContent);
+                        }
+                    }
+                } else if (data.error) {
+                    addMessage('Error: ' + data.error, 'bot-message error');
+                }
+                scrollToBottom();
+            }
+
+            function addMessage(text, className) {
+                const msgContainer = $('<div class="message"></div>').addClass(className);
+                msgContainer.text(text);
+                $('#chat-messages').append(msgContainer);
+                scrollToBottom();
+                return msgContainer;
+            }
+
+            function scrollToBottom() {
+                const chatMessages = $('#chat-messages');
+                chatMessages.scrollTop(chatMessages[0].scrollHeight);
+            }
+            
+            addMessage('Hello! How can I help you today?', 'bot-message');
+        });
+    </script>
+</body>
+</html>

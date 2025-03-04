@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Dashboard & Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='chat.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <div class="main-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>Your Dashboard</h1>
+                <p>Welcome, {{ user.name }}!</p>
+            </div>
+            
+            <div class="meals-card">
+                <div class="card-body">
+                    <h2>Today's Meals</h2>
+                    {% if daily_nutrients %}
+                        <table class="meals-table">
+                            <thead>
+                                <tr>
+                                    <th>Dish</th>
+                                    <th>Calories</th>
+                                    <th>Protein</th>
+                                    <th>Carbs</th>
+                                    <th>Fat</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for meal in daily_nutrients %}
+                                    <tr>
+                                        <td>{{ meal.dish_name }}</td>
+                                        <td>{{ meal.calories }}</td>
+                                        <td>{{ meal.protein }}</td>
+                                        <td>{{ meal.carbs }}</td>
+                                        <td>{{ meal.fat }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p>No meals logged today</p>
+                    {% endif %}
+                    <a href="{{ url_for('add_dish') }}" class="btn">Add Meal</a>
+                </div>
+            </div>
+            
+            <div class="health-analytics">
+                <a href="{{ url_for('show_comparison') }}" class="btn">Health Analytics</a>
+            </div>
+            
+            <div class="sidebar-footer">
+                <a href="{{ url_for('logout') }}" class="btn logout">Sign Out</a>
+            </div>
+        </aside>
+        
+        <main class="chat-main">
+            <div class="chat-top">
+                <a href="{{ url_for('profile') }}" class="btn profile-btn top-profile">👤</a>
+            </div>
+            
+            <section class="chat-section">
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Dynamically inserted messages -->
+                </div>
+                
+                <!-- Example cards are now placed in their own container (with matching width) just above the input -->
+                <div class="example-container">
+                    <div class="example-cards" id="example-cards">
+                        <div class="card">
+                            <h3>Learn about nutrition</h3>
+                            <p>What is the importance of protein?</p>
+                        </div>
+                        <div class="card">
+                            <h3>Meal Planning</h3>
+                            <p>get recommendations</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <form id="chat-form">
+                    <div class="input-container">
+                        <div class="input-wrapper">
+                            <textarea id="user-input" placeholder="Send a message..." rows="1" class="message-input"></textarea>
+                            <div class="input-footer">
+                                <div class="left-actions">
+                                    <button class="attachment-btn" type="button">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+                                        </svg>
+                                    </button>
+                                    <button class="toggle-btn reasoning-toggle" type="button" title="Toggle Reasoning">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M9 18h6"/>
+                                            <path d="M10 21h4"/>
+                                            <path d="M12 2 A7 7 0 0 0 5 9 C5 11.38 6.19 13.47 8 14.74 V17 h8 v-2.26 C17.81 13.47 19 11.38 19 9 A7 7 0 0 0 12 2"/>
+                                        </svg>
+                                    </button>
+                                    <button class="toggle-btn context-toggle" type="button" title="Toggle Context">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="11" cy="11" r="8"></circle>
+                                            <path d="M21 21l-4.35-4.35"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <button class="send-btn" type="submit">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            let firstMessageSent = false;
+            let showReasoning = false;
+            let showContext = false;
+            const loadingHTML = `
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Thinking</div>
+                </div>
+            `;
+
+            // Centralized function to send a query
+            function sendQuery(query) {
+                if (!firstMessageSent) {
+                    $('#example-cards').hide();
+                    firstMessageSent = true;
+                }
+                addMessage(query, 'user-message');
+                const $loading = $(loadingHTML);
+                $('#chat-messages').append($loading);
+                scrollToBottom();
+
+                $.ajax({
+                    url: '/ask',
+                    method: 'POST',
+                    data: { query: query },
+                    success: function(response) {
+                        $loading.remove();
+                        handleBotResponse(response);
+                    },
+                    error: function(xhr, status, error) {
+                        $loading.remove();
+                        addMessage('Error connecting to the server: ' + error, 'bot-message error');
+                    }
+                });
+            }
+            
+            $('#chat-form').on('submit', function(e) {
+                e.preventDefault();
+                const userInput = $('#user-input').val();
+                if (!userInput) return;
+                $('#user-input').val('');
+                sendQuery(userInput);
+            });
+
+            // Clicking an example card sends its text as a query
+            $('#example-cards .card').on('click', function() {
+                const cardTitle = $(this).find('h3').text();
+                const cardText = $(this).find('p').text();
+                const query = cardTitle + ": " + cardText;
+                sendQuery(query);
+            });
+            
+            // Toggle buttons
+            $('.reasoning-toggle').on('click', function() {
+                $(this).toggleClass('active');
+                showReasoning = !showReasoning;
+                $('.reasoning-content').toggle(showReasoning);
+            });
+
+            $('.context-toggle').on('click', function() {
+                $(this).toggleClass('active');
+                showContext = !showContext;
+                $('.context-content').toggle(showContext);
+            });
+
+            // New function to animate text typing
+            async function typeMessage(element, text) {
+                const words = text.split(' ');
+                element.empty(); // Clear any existing content
+                
+                for (let word of words) {
+                    const wordSpan = $('<span class="word">')
+                        .text(word + ' ')
+                        .appendTo(element);
+                    
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            wordSpan.addClass('visible');
+                            resolve();
+                        }, 50); // Adjust speed here (lower = faster)
+                    });
+                    
+                    // Add line breaks for natural sentence breaks
+                    if (word.endsWith('.') || word.endsWith('!') || word.endsWith('?')) {
+                        element.append($('<br>'));
+                    }
+                }
+            }
+
+            // Update the addMessage function
+            function addMessage(text, className) {
+                const wrapperClass = className.includes('user-message') ? 'user' : 'bot';
+                const wrapper = $('<div class="message-wrapper"></div>').addClass(wrapperClass);
+                const msgContainer = $('<div class="message"></div>').addClass(className);
+                
+                wrapper.append(msgContainer);
+                $('#chat-messages').append(wrapper);
+                
+                if (className.includes('bot-message')) {
+                    msgContainer.addClass('typing');
+                    typeMessage(msgContainer, text).then(() => {
+                        scrollToBottom();
+                    });
+                } else {
+                    msgContainer.text(text);
+                    scrollToBottom();
+                }
+                
+                return msgContainer;
+            }
+            
+            // New function to add additional content boxes
+            function addAdditionalContent(mainMessage, data) {
+                // Add reasoning section if it exists
+                if (data.reasoning) {
+                    const reasoningWrapper = $('<div class="reasoning-content additional-content"></div>')
+                        .html(data.reasoning)
+                        .toggle(showReasoning); // Initial visibility based on toggle state
+                    mainMessage.after(reasoningWrapper);
+                }
+
+                // Add context section if it exists
+                if (data.context_used) {
+                    const contextWrapper = $('<div class="context-content additional-content"></div>')
+                        .html('Context used: ' + data.context_used)
+                        .toggle(showContext); // Initial visibility based on toggle state
+                    mainMessage.after(contextWrapper);
+                }
+            }
+
+            // Update handleBotResponse
+            async function handleBotResponse(data) {
+                if (data.answer) {
+                    const answer = addMessage(data.answer, 'bot-message answer');
+                    
+                    // Wait for main answer to finish typing
+                    await new Promise(resolve => {
+                        const checkTyping = setInterval(() => {
+                            if (answer.find('.word.visible').length === answer.find('.word').length) {
+                                clearInterval(checkTyping);
+                                resolve();
+                            }
+                        }, 100);
+                    });
+
+                    // Add additional content immediately after main answer
+                    addAdditionalContent(answer, data);
+                } else if (data.error) {
+                    addMessage('Error: ' + data.error, 'bot-message error');
+                }
+                scrollToBottom();
+            }
+            
+            function scrollToBottom() {
+                const chatMessages = $('#chat-messages');
+                chatMessages.scrollTop(chatMessages[0].scrollHeight);
+            }
+            
+            addMessage('Hello! How can I help you today?', 'bot-message');
+        });
+    </script>
+</body>
+</html>
